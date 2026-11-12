@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OpenAPI to MCP Converter</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/js-yaml/4.1.0/js-yaml.min.js"></script>
+<style>
+/* Layout: spec editor on the left, generated agent tools and readiness checks on the right. */
+:root {
+  --bg: #f4f6f8; --surface: #ffffff; --ink: #15202b; --muted: #5a6674; --line: #dde2e8;
+  --accent: #0e6b66; --accent-soft: #e0f0ee; --crit: #b42318; --crit-soft: #fcebe9;
+  --warn: #9a5a06; --warn-soft: #fbefd9; --ok: #1d7540; --ok-soft: #e2f2e7;
+  --sans: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f1419; --surface: #161d24; --ink: #e5eaef; --muted: #93a0ac; --line: #27313b;
+    --accent: #52c2b8; --accent-soft: #12302d; --crit: #ff8f86; --crit-soft: #3b1b19;
+    --warn: #f0b55c; --warn-soft: #382811; --ok: #72d295; --ok-soft: #15301f; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f1419; --surface: #161d24; --ink: #e5eaef; --muted: #93a0ac; --line: #27313b;
+  --accent: #52c2b8; --accent-soft: #12302d; --crit: #ff8f86; --crit-soft: #3b1b19;
+  --warn: #f0b55c; --warn-soft: #382811; --ok: #72d295; --ok-soft: #15301f; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 14px; line-height: 1.5; padding-left: 16px; padding-right: 16px; }
+button, textarea { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.wrap { max-width: 1240px; margin: 0 auto; padding-block: 28px 48px; display: grid; gap: 18px; }
+.eyebrow { font-size: 11.5px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+.eyebrow a { color: var(--accent); text-decoration: none; }
+h1 { margin: 4px 0 2px; font-size: 26px; font-weight: 700; letter-spacing: -.01em; }
+.sub { color: var(--muted); margin: 0; max-width: 78ch; }
+.grid { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: 18px; align-items: start; }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px; display: grid; gap: 12px; min-width: 0; }
+.panel h2 { margin: 0; font-size: 15px; font-weight: 600; }
+.bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; }
+.seg { display: inline-flex; gap: 4px; background: var(--bg); border-radius: 8px; padding: 3px; }
+.seg button { border: 0; background: transparent; padding: 5px 10px; border-radius: 6px; cursor: pointer; font-size: 13px; }
+.seg button[aria-pressed="true"] { background: var(--surface); font-weight: 600; box-shadow: 0 1px 2px rgba(0,0,0,.08); }
+textarea { width: 100%; min-height: 520px; resize: vertical; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); padding: 12px; font-family: var(--mono); font-size: 12.5px; line-height: 1.55; tab-size: 2; }
+.hint { font-size: 12.5px; color: var(--muted); }
+.err { color: var(--crit); background: var(--crit-soft); border-radius: 8px; padding: 10px 12px; font-size: 13px; }
+.summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.stat { background: var(--bg); border-radius: 8px; padding: 10px 12px; }
+.stat .label { font-size: 12px; color: var(--muted); }
+.stat .value { font-size: 22px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.stat.good .value { color: var(--ok); } .stat.mid .value { color: var(--warn); } .stat.bad .value { color: var(--crit); }
+.tool { border: 1px solid var(--line); border-radius: 10px; display: grid; }
+.tool-head { padding: 12px 14px; display: grid; gap: 6px; border-bottom: 1px solid var(--line); }
+.tool-name { font-family: var(--mono); font-weight: 500; font-size: 14px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.method { font-family: var(--mono); font-size: 11px; font-weight: 600; padding: 1px 7px; border-radius: 5px; background: var(--accent-soft); color: var(--accent); }
+.route { font-family: var(--mono); font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
+.desc { font-size: 13px; }
+.desc.empty { color: var(--crit); }
+.pills { display: flex; flex-wrap: wrap; gap: 6px; }
+.pill { font-size: 11.5px; border: 1px solid var(--line); border-radius: 999px; padding: 1px 8px; color: var(--muted); }
+.pill.ro { color: var(--ok); border-color: var(--ok); }
+.pill.destructive { color: var(--crit); border-color: var(--crit); }
+.tool-body { padding: 12px 14px; display: grid; gap: 10px; }
+.params { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.params th, .params td { text-align: left; padding: 5px 6px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.params th { color: var(--muted); font-weight: 600; font-size: 11.5px; }
+.params td code { font-family: var(--mono); }
+.params .missing { color: var(--crit); }
+.where { font-size: 11px; color: var(--muted); font-family: var(--mono); }
+.checks { display: grid; gap: 4px; }
+.check { font-size: 12.5px; display: grid; grid-template-columns: 18px 1fr; gap: 6px; }
+.check .i { font-weight: 700; }
+.check.pass .i { color: var(--ok); } .check.fail .i { color: var(--crit); }
+details { border-top: 1px dashed var(--line); padding-top: 8px; }
+summary { cursor: pointer; font-size: 12.5px; color: var(--accent); font-weight: 600; }
+pre.json { margin: 8px 0 0; background: var(--bg); border-radius: 8px; padding: 10px; font-family: var(--mono); font-size: 12px; overflow-x: auto; }
+.copy { border: 1px solid var(--line); background: var(--surface); border-radius: 7px; padding: 5px 10px; cursor: pointer; font-size: 12.5px; font-weight: 600; }
+.tools { display: grid; gap: 12px; }
+.explain { font-size: 13px; color: var(--muted); max-width: 90ch; }
+.explain b { color: var(--ink); }
+@media (max-width: 900px) { .grid { grid-template-columns: 1fr; } textarea { min-height: 320px; } }
+@media (max-width: 460px) { .summary { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="eyebrow">Agent platform portfolio · Prototype 1</div>
+    <h1>OpenAPI to MCP converter</h1>
+    <p class="sub">Paste an OpenAPI spec and see the MCP tools an agent gateway would generate from it, plus a quick check of how agent-ready each tool is. Everything runs in your browser.</p>
+  </header>
+
+  <div class="grid">
+    <section class="panel" aria-labelledby="spec-h">
+      <div class="bar">
+        <h2 id="spec-h">OpenAPI spec (YAML or JSON)</h2>
+        <div class="seg" role="group" aria-label="Load a sample">
+          <button id="s-weak" aria-pressed="true">Weak sample</button>
+          <button id="s-ready" aria-pressed="false">Agent-ready sample</button>
+        </div>
+      </div>
+      <textarea id="spec" spellcheck="false" aria-label="OpenAPI spec"></textarea>
+      <div class="hint">Edit the spec and the tools update as you type. Try adding a description or an enum to the weak sample.</div>
+    </section>
+
+    <section class="panel" aria-labelledby="out-h" aria-live="polite">
+      <div class="bar">
+        <h2 id="out-h">Generated agent tools</h2>
+        <button class="copy" id="copy">Copy tools/list JSON</button>
+      </div>
+      <div id="error" class="err" hidden></div>
+      <div class="summary" id="summary"></div>
+      <div class="tools" id="tools"></div>
+    </section>
+  </div>
+
+  <p class="explain"><b>How the conversion works.</b> Each API operation becomes one tool. The <b>operationId</b> becomes the tool name, the <b>summary and description</b> become what the model reads to decide when to use it, and the <b>path, query, header and body inputs</b> are merged into one input schema. The HTTP method sets safety hints: GET is read-only, DELETE is destructive. The gateway keeps a private route note so it can turn each tool call back into the real API request. The readiness checks are a simple version of the Tier A static checks from the readiness platform.</p>
+</div>
+
+<script>
+const SAMPLES = {
+weak: `openapi: 3.0.3
+info:
+  title: Namespace API
+  version: "1.0"
+paths:
+  /v2/ns:
+    post:
+      operationId: postNs
+      summary: Creates ns
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                team: { type: string }
+                env: { type: string }
+                quota: { type: string }
+      responses:
+        "200": { description: OK }
+    get:
+      operationId: getNs2
+      responses:
+        "200": { description: OK }
+  /v2/ns/{id}:
+    delete:
+      operationId: delNs
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200": { description: OK }
+`,
+ready: `openapi: 3.0.3
+info:
+  title: Namespace Provisioning API
+  version: "2.1"
+paths:
+  /v2/teams/{teamId}/namespaces:
+    post:
+      operationId: create_namespace
+      summary: Create a Kubernetes namespace for a team
+      description: Use for new dev or staging environments. Do not use for production; use request_prod_namespace instead.
+      parameters:
+        - name: teamId
+          in: path
+          required: true
+          description: The owning team's ID.
+          schema: { type: string, example: payroll }
+        - name: Idempotency-Key
+          in: header
+          required: true
+          description: Unique key so a retried request never creates a second namespace.
+          schema: { type: string, format: uuid }
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/NamespaceRequest" }
+      responses:
+        "202": { description: Accepted. Poll get_namespace_status with the returned job_id. }
+        "422":
+          description: A value breaks a rule. The body names the field and how to fix it.
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/Problem" }
+    get:
+      operationId: list_namespaces
+      summary: List a team's namespaces
+      description: Use to check what already exists before creating a new namespace. Read-only.
+      parameters:
+        - name: teamId
+          in: path
+          required: true
+          description: The owning team's ID.
+          schema: { type: string, example: payroll }
+        - name: limit
+          in: query
+          description: Maximum results per page.
+          schema: { type: integer, default: 50, maximum: 200 }
+      responses:
+        "200": { description: A page of namespaces. }
+        "404": { description: Team not found. Check the ID with list_teams. }
+  /v2/jobs/{jobId}:
+    get:
+      operationId: get_namespace_status
+      summary: Check whether a namespace request has finished
+      description: Use after create_namespace until state is complete or failed. Not for listing namespaces.
+      parameters:
+        - name: jobId
+          in: path
+          required: true
+          description: The job_id returned by create_namespace.
+          schema: { type: string, example: job-7f3a }
+      responses:
+        "200": { description: Current job state. }
+        "404": { description: Unknown job ID. }
+  /v2/namespaces/{name}:
+    delete:
+      operationId: delete_namespace
+      summary: Permanently delete a dev or staging namespace
+      description: Deletes the namespace and everything in it. Not allowed for production. Requires human approval.
+      parameters:
+        - name: name
+          in: path
+          required: true
+          description: Full namespace name, for example payroll-dev.
+          schema: { type: string, pattern: "^[a-z0-9-]+-(dev|staging)$", example: payroll-dev }
+      responses:
+        "202": { description: Deletion queued. }
+        "403": { description: Approval missing. Request approval from the team lead, then retry. }
+components:
+  schemas:
+    NamespaceRequest:
+      type: object
+      required: [env, cpu_quota, cost_center]
+      properties:
+        env:
+          type: string
+          enum: [dev, staging]
+          description: Target environment.
+        cpu_quota:
+          type: integer
+          enum: [2, 4, 8]
+          description: Number of vCPUs.
+          example: 4
+        cost_center:
+          type: string
+          pattern: "^CC-[0-9]{5}$"
+          description: Required by policy NS-LABEL-01.
+          example: CC-40217
+    Problem:
+      type: object
+      properties:
+        type: { type: string }
+        title: { type: string }
+        detail: { type: string }
+`
+};
+
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const METHODS = ["get", "post", "put", "patch", "delete"];
+let lastTools = [];
+
+function resolve(node, spec, depth = 0) {
+  if (!node || typeof node !== "object" || depth > 8) return node;
+  if (node.$ref && typeof node.$ref === "string" && node.$ref.startsWith("#/")) {
+    const target = node.$ref.slice(2).split("/").reduce((o, k) => (o ? o[k] : undefined), spec);
+    return resolve(target, spec, depth + 1) || {};
+  }
+  if (Array.isArray(node)) return node.map(n => resolve(n, spec, depth + 1));
+  const out = {};
+  for (const [k, v] of Object.entries(node)) out[k] = resolve(v, spec, depth + 1);
+  return out;
+}
+
+function convert(spec) {
+  const tools = [];
+  for (const [path, item] of Object.entries(spec.paths || {})) {
+    const shared = item.parameters || [];
+    for (const m of METHODS) {
+      const op = item[m];
+      if (!op) continue;
+      const params = [...shared, ...(op.parameters || [])].map(p => resolve(p, spec));
+      const props = {}, required = [], where = {};
+      params.forEach(p => {
+        if (!p || !p.name) return;
+        props[p.name] = { ...(p.schema || {}), ...(p.description ? { description: p.description } : {}) };
+        where[p.name] = p.in;
+        if (p.required) required.push(p.name);
+      });
+      const body = resolve(op.requestBody?.content?.["application/json"]?.schema, spec);
+      if (body && body.properties) {
+        for (const [k, v] of Object.entries(body.properties)) { props[k] = v; where[k] = "body"; }
+        (body.required || []).forEach(r => required.push(r));
+      }
+      const name = op.operationId || `${m}_${path.replace(/[{}]/g, "").replace(/[^a-zA-Z0-9]+/g, "_").replace(/^_|_$/g, "")}`;
+      const description = [op.summary, op.description].filter(Boolean).join(". ").replace(/\.\./g, ".");
+      const annotations = { readOnlyHint: m === "get" };
+      if (m === "delete") annotations.destructiveHint = true;
+      if (["get", "put", "delete"].includes(m)) annotations.idempotentHint = true;
+      tools.push({
+        tool: { name, description, inputSchema: { type: "object", properties: props, ...(required.length ? { required } : {}) }, annotations },
+        route: { method: m.toUpperCase(), path, where },
+        responses: op.responses || {}
+      });
+    }
+  }
+  return tools;
+}
+
+function checks(t) {
+  const { tool, route, responses } = t;
+  const props = tool.inputSchema.properties;
+  const list = [];
+  const badName = /^(get|post|put|patch|del|delete)[A-Z]/.test(tool.name) || /\d/.test(tool.name) || tool.name.length < 6;
+  list.push([!badName, badName ? "Name mirrors the HTTP method or path. Use an intent like create_namespace." : "Name states the intent."]);
+  const shortDesc = tool.description.length < 30;
+  list.push([!shortDesc, shortDesc ? "Description is too short for an agent to know when to use it." : "Description says what it does."]);
+  const whenNot = /\b(not|instead|only)\b/i.test(tool.description);
+  list.push([whenNot, whenNot ? "Says when not to use it." : "Doesn't say when not to use it."]);
+  const undescribed = Object.entries(props).filter(([, v]) => !v.description).map(([k]) => k);
+  list.push([!undescribed.length, undescribed.length ? `Inputs with no description: ${undescribed.join(", ")}.` : "Every input is described."]);
+  const freeText = Object.entries(props).filter(([, v]) => v.type === "string" && !v.enum && !v.pattern && !v.format && v.example === undefined).map(([k]) => k);
+  list.push([!freeText.length, freeText.length ? `Free-text inputs with no allowed values, pattern or example: ${freeText.join(", ")}.` : "Text inputs have allowed values, a pattern or an example."]);
+  const errs = Object.keys(responses).some(c => /^4/.test(c));
+  list.push([errs, errs ? "Documents error responses." : "No error responses documented, so agents can't recover."]);
+  if (route.method === "POST") {
+    const idem = Object.keys(props).some(k => /idempotency/i.test(k));
+    list.push([idem, idem ? "Supports an idempotency key, so retries are safe." : "No idempotency key, so a retry could create duplicates."]);
+  }
+  return list;
+}
+
+function render() {
+  const text = $("spec").value;
+  let spec;
+  try {
+    spec = /^\s*\{/.test(text) ? JSON.parse(text) : jsyaml.load(text);
+    if (!spec || typeof spec !== "object" || !spec.paths) throw new Error("No paths section found. An OpenAPI spec lists its endpoints under paths.");
+  } catch (e) {
+    $("error").hidden = false;
+    $("error").textContent = "Can't read this spec yet: " + (e.message || e).toString().split("\n")[0];
+    return;
+  }
+  $("error").hidden = true;
+  const tools = convert(spec);
+  lastTools = tools.map(t => t.tool);
+  let pass = 0, total = 0;
+  const cards = tools.map(t => {
+    const c = checks(t);
+    c.forEach(([ok]) => { total++; if (ok) pass++; });
+    const props = t.tool.inputSchema.properties, req = t.tool.inputSchema.required || [];
+    const rows = Object.entries(props).map(([k, v]) => {
+      const type = v.enum ? `${v.type || ""} one of ${v.enum.join(", ")}` : v.pattern ? `${v.type} matching ${v.pattern}` : (v.type || "any");
+      return `<tr><td><code>${esc(k)}</code>${req.includes(k) ? " *" : ""}<div class="where">${esc(t.route.where[k])}</div></td><td>${esc(type)}</td><td class="${v.description ? "" : "missing"}">${esc(v.description || "No description")}</td></tr>`;
+    }).join("");
+    const a = t.tool.annotations;
+    return `<article class="tool">
+      <div class="tool-head">
+        <div class="tool-name"><span class="method">${t.route.method}</span>${esc(t.tool.name)}</div>
+        <div class="route">Routes to ${t.route.method} ${esc(t.route.path)}</div>
+        <div class="desc ${t.tool.description ? "" : "empty"}">${esc(t.tool.description || "No description. The agent only sees the name.")}</div>
+        <div class="pills">${a.readOnlyHint ? '<span class="pill ro">read-only</span>' : '<span class="pill">changes data</span>'}${a.destructiveHint ? '<span class="pill destructive">destructive: ask before running</span>' : ""}${a.idempotentHint ? '<span class="pill">safe to repeat</span>' : ""}</div>
+      </div>
+      <div class="tool-body">
+        ${rows ? `<table class="params"><thead><tr><th>Input</th><th>Type</th><th>Description</th></tr></thead><tbody>${rows}</tbody></table>` : '<div class="hint">No inputs.</div>'}
+        <div class="checks">${c.map(([ok, msg]) => `<div class="check ${ok ? "pass" : "fail"}"><span class="i">${ok ? "✓" : "✕"}</span><span>${esc(msg)}</span></div>`).join("")}</div>
+        <details><summary>Show the MCP tool definition</summary><pre class="json">${esc(JSON.stringify(t.tool, null, 2))}</pre></details>
+      </div>
+    </article>`;
+  });
+  const score = total ? Math.round(pass / total * 100) : 0;
+  const cls = score >= 80 ? "good" : score >= 50 ? "mid" : "bad";
+  $("summary").innerHTML = `
+    <div class="stat"><div class="label">Tools generated</div><div class="value">${tools.length}</div></div>
+    <div class="stat ${cls}"><div class="label">Readiness checks passed</div><div class="value">${pass}/${total}</div></div>
+    <div class="stat ${cls}"><div class="label">Static readiness score</div><div class="value">${score}%</div></div>`;
+  $("tools").innerHTML = cards.join("") || '<div class="hint">No operations found under paths.</div>';
+}
+
+function load(which) {
+  $("spec").value = SAMPLES[which];
+  $("s-weak").setAttribute("aria-pressed", which === "weak");
+  $("s-ready").setAttribute("aria-pressed", which === "ready");
+  render();
+}
+
+$("s-weak").addEventListener("click", () => load("weak"));
+$("s-ready").addEventListener("click", () => load("ready"));
+let t;
+$("spec").addEventListener("input", () => { clearTimeout(t); t = setTimeout(render, 250); });
+$("copy").addEventListener("click", async () => {
+  const text = JSON.stringify({ tools: lastTools }, null, 2);
+  try { await navigator.clipboard.writeText(text); $("copy").textContent = "Copied"; }
+  catch { $("copy").textContent = "Copy not allowed here"; }
+  setTimeout(() => { $("copy").textContent = "Copy tools/list JSON"; }, 1800);
+});
+if (window.jsyaml) load("weak"); else window.addEventListener("load", () => load("weak"));
+</script>
+</body>
+</html>
