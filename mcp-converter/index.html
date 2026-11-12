@@ -1,0 +1,10 @@
+AGENT PLATFORM PORTFOLIO · PROTOTYPE 1
+OpenAPI to MCP converter
+Paste an OpenAPI spec and see the MCP tools an agent gateway would generate from it, plus a quick check of how agent-ready each tool is. Everything runs in your browser.
+OpenAPI spec (YAML or JSON)
+Weak sample
+Agent-ready sample
+Edit the spec and the tools update as you type. Try adding a description or an enum to the weak sample.
+Generated agent tools
+Copy tools/list JSON
+How the conversion works. Each API operation becomes one tool. The operationId becomes the tool name, the summary and description become what the model reads to decide when to use it, and the path, query, header and body inputs are merged into one input schema. The HTTP method sets safety hints: GET is read-only, DELETE is destructive. The gateway keeps a private route note so it can turn each tool call back into the real API request. The readiness checks are a simple version of the Tier A static checks from the readiness platform.
